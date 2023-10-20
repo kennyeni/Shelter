@@ -11,6 +11,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ShortcutInfo;
@@ -27,6 +28,7 @@ import android.os.Environment;
 import android.os.UserManager;
 import android.provider.MediaStore;
 import android.provider.Settings;
+import android.util.Log;
 import android.widget.Toast;
 
 import androidx.activity.result.contract.ActivityResultContract;
@@ -47,8 +49,10 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class Utility {
     // Determine if the current app is the owner of the current profile
@@ -226,7 +230,71 @@ public class Utility {
         manager.setCrossProfileContactsSearchDisabled(adminComponent,
                 SettingsManager.getInstance().getBlockContactsSearchingEnabled());
 
+        EnableExtraPermissions(context, manager);
+
+//        //setCrossProfileCalendarPackages is deprecated since upsideDownCake - have to add Android Auto(com.google.android.projection.gearhead)
+//        manager.setCrossProfileCalendarPackages(adminComponent, null);
+//
+//        manager.setCrossProfilePackages(adminComponent, Set.of("com.google.android.projection.gearhead"));
+
         manager.setProfileEnabled(adminComponent);
+    }
+
+    private static void EnableExtraPermissions(Context context, DevicePolicyManager manager) {
+        ComponentName adminComponent = new ComponentName(context.getApplicationContext(), ShelterDeviceAdminReceiver.class);
+
+        String TAG = "ExtraPermissions";
+
+        // Log current state
+        getCurrentExtraPermissions(manager, adminComponent, TAG);
+        Log.d(TAG, "------------------------");
+
+        // Set Permisions
+        setExtraPermissions(context, manager, adminComponent, TAG);
+
+        // Log new state
+        getCurrentExtraPermissions(manager, adminComponent, TAG);
+        Log.d(TAG, "----------------------------------------------------------");
+    }
+
+    private static void setExtraPermissions(Context context, DevicePolicyManager manager, ComponentName adminComponent, String TAG) {
+        // Get all packages along with permissions
+        List<PackageInfo> allPackages = context.getPackageManager().getInstalledPackages(
+                PackageManager.GET_PERMISSIONS | PackageManager.MATCH_UNINSTALLED_PACKAGES
+        );
+
+        Set<String> cross_apps = new HashSet<>();
+        for (PackageInfo pack : allPackages) {
+            if (pack.requestedPermissions != null &&
+                    Arrays.stream(pack.requestedPermissions).anyMatch(android.Manifest.permission.INTERACT_ACROSS_PROFILES::equals)){
+                cross_apps.add(pack.packageName);
+                Log.d(TAG, "Cross Profile Package added: " + pack.packageName);
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.setPermittedCrossProfileNotificationListeners(adminComponent, null);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            manager.setCrossProfileCalendarPackages(adminComponent, null);
+            manager.setCrossProfilePackages(adminComponent, cross_apps);
+        }
+    }
+
+    private static void getCurrentExtraPermissions(DevicePolicyManager manager, ComponentName adminComponent, String TAG) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            List<String> notificationPermissions = manager.getPermittedCrossProfileNotificationListeners(adminComponent);
+            Log.d(TAG, "The value on getPermittedCrossProfileNotificationListeners is: " + notificationPermissions);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            Set<String> calendarPermissions = manager.getCrossProfileCalendarPackages(adminComponent);
+            Log.d(TAG, "The value on getCrossProfileCalendarPackages is: " + calendarPermissions);
+
+            Set<String> crossProfilePermissions = manager.getCrossProfilePackages(adminComponent);
+            Log.d(TAG, "The value on getCrossProfilePackages is: " + crossProfilePermissions);
+        }
     }
 
     public static void enforceUserRestrictions(Context context) {

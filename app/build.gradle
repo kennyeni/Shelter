@@ -42,7 +42,7 @@ android {
     buildToolsVersion = '34.0.0'
     defaultConfig {
         applicationId "net.typeblog.shelter"
-        minSdkVersion 24
+        minSdkVersion 30
         targetSdkVersion 34
         versionCode getVersionCode()
         versionName getVersionName()
